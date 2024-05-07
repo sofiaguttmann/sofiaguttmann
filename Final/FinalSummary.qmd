@@ -1,0 +1,249 @@
+---
+title: "Final Report"
+author: "Sofia Guttmann"
+format: pdf
+editor: visual
+geometry: margin=0.75in
+header-includes: 
+   - \usepackage{wrapfig}
+---
+
+```{r}
+#| include: false
+
+library(kableExtra)
+```
+
+```{=html}
+```
+### Motivation
+
+```         
+```
+
+The sustainability industry is booming right now, and one of the largest contributors to the discourse is cars. Cars contribute excess CO2 into the environment. In order to be able to make an impact, it is important to know what types of cars can have the least impact without switching to electric vehicles. For my project, I wanted to cluster using hierarchical clusters and dendrograms. I will be spending my summer in Boston working in the sustainability sector. I would like to be able to show my work to my employers to be able to network and discuss ideas.
+
+```         
+```
+
+### Data
+
+This dataset is from Kaggle.
+
+https://www.kaggle.com/datasets/sahirmaharajj/fuel-economy
+
+It includes a variety of variables. Since the dataset is so large, I cleaned it to include the variables that I was going to use. The variables I isolated are "year", "engine_cylinders", "city_mpg_ft1", "tailpipe_co2_in_grams_mile_ft1." I also decided to run samples instead of working with the entire dataset to preserve memory and high-speed function. The data presents key information about efficiency and environmental harm.
+
+```{r echo=FALSE}
+#| label: load-packages
+#| warning: false
+
+# load packages
+library(tidyverse)
+library(kableExtra)
+library(robotstxt) 
+library(rvest) 
+library(purrr) 
+library(readr)
+library(tidyr)
+library(sf) #for reading shape files
+
+# set code chunk defaults
+knitr::opts_chunk$set(tidy = F, # display code as typed
+                      size = "small", # slightly smaller code font
+                      message = FALSE,
+                      warning = FALSE,
+                      comment = "\t") 
+
+# set black & white default plot theme
+theme_set(theme_classic()) 
+
+# improve digit and NA display 
+options(scipen = 1, knitr.kable.NA = '')
+
+# Read csv file obtained from Database
+fuel <- read.csv("fuel.csv")
+# Subset the dataset to include only the specified variables
+Fuel_clean <- fuel[, c("year", "engine_cylinders", "fuel_type", "city_mpg_ft1", "tailpipe_co2_in_grams_mile_ft1")]
+
+# View the structure of the cleaned dataset
+str(Fuel_clean)
+
+
+```
+
+### Hierarchical Clustering
+
+```{r echo=FALSE}
+# Select only the specified columns
+Fuel_hclust <- Fuel_clean[, c("year", "engine_cylinders", "city_mpg_ft1", "tailpipe_co2_in_grams_mile_ft1")]
+
+# View the structure of the cleaned dataset
+str(Fuel_hclust)
+
+# Sample a subset of rows from your dataset
+sampled_data <- Fuel_hclust[sample(nrow(Fuel_hclust), 1000), ]
+
+# Scale the sampled data
+scaled_data <- scale(sampled_data)
+
+# Select only the specified columns
+Fuel_hclust <- Fuel_clean[, c("year", "engine_cylinders", "city_mpg_ft1", "tailpipe_co2_in_grams_mile_ft1")]
+
+# View the structure of the cleaned dataset
+str(Fuel_hclust) 
+
+# Sample a subset of rows from your dataset
+sampled_data <- Fuel_hclust[sample(nrow(Fuel_hclust), 1000), ]
+
+# Scale the sampled data
+scaled_data <- scale(sampled_data[, "tailpipe_co2_in_grams_mile_ft1"])
+
+# Perform hierarchical clustering on the scaled data
+hclust_result <- hclust(dist(scaled_data), method = "complete")
+
+# Cut the dendrogram to obtain clusters
+num_clusters <- 3  # Adjust the number of clusters as needed
+cluster_assignment <- cutree(hclust_result, k = num_clusters)
+
+# View cluster assignments
+print(cluster_assignment)
+
+# Perform hierarchical clustering with complete linkage
+hclust_result <- hclust(dist(scaled_data), method = "complete")
+
+# View cluster assignments
+cluster_assignments <- cutree(hclust_result, k = 3)  # Adjust k as needed
+print(cluster_assignments)
+
+```
+
+Hierarchical clustering is a method used in unsupervised machine learning to group similar data points into clusters. It builds a hierarchy of clusters by successively merging or splitting them based on their similarity or dissimilarity. Agglomerative Hierarchical Clustering starts with each data point as a separate cluster and then iteratively merges the most similar clusters until only one cluster remains. I sampled a subset of rows from your dataset to make the clustering process computationally feasible. I scaled the sampled data to ensure that all variables have the same scale, which is important for distance-based methods like hierarchical clustering. I performed hierarchical clustering on the scaled data using the **`hclust()`** function, which calculates the pairwise distances between data points and then applies a linkage method to determine the distance between clusters. Complete linkage is a method used in hierarchical clustering to measure the distance between two clusters. In complete linkage, the distance between two clusters is defined as the maximum distance between any two points in the two clusters. Finally, I interpreted the clusters by examining the characteristics of each cluster, such as the mean values of the variables within each cluster, to understand the differences between them.
+
+```{r echo=FALSE}
+library(ggplot2)
+
+# Add cluster assignments to the sampled data
+sampled_data$cluster <- factor(cluster_assignments)
+
+# Plot the data points with cluster assignments
+ggplot(sampled_data, aes(x = city_mpg_ft1, y = tailpipe_co2_in_grams_mile_ft1, color = cluster)) +
+  geom_point() +
+  labs(title = "Clustering Visualization", x = "City MPG", y = "Tailpipe CO2 (g/mile)")
+```
+
+In this diagram, we can see that as Mile Per Gallon increases, the Tailpipe CO2 variable decreases. This makes intuitive sense because as engines are more efficient, they release less pollution into the air. Cluster 3 produces the most emission with the lowest Mile Per Gallon rate, Cluster 1 is in the middle, and Cluster 2 has the lowest rates of emission with the highest MPG.
+
+```{r echo=FALSE}
+
+set.seed(42)  # For reproducibility
+sampled_data <- Fuel_hclust %>% sample_n(1000)  # Sample 1000 rows randomly
+
+dist_matrix <- dist(sampled_data[, c("tailpipe_co2_in_grams_mile_ft1", "city_mpg_ft1", "engine_cylinders")])
+
+# Perform hierarchical clustering
+hc <- hclust(dist_matrix, method = "complete")
+clusters <- cutree(hc, k = 3)  # Cut dendrogram to obtain 3 clusters
+
+# Combine cluster assignments with original data
+data_with_clusters <- cbind(sampled_data, cluster = clusters)
+
+# Aggregate data by cluster
+cluster_summary <- data_with_clusters %>%
+  group_by(cluster) %>%
+  summarize(
+    mean_co2 = mean(tailpipe_co2_in_grams_mile_ft1),
+    mean_city_mpg = mean(city_mpg_ft1),
+    mean_engine_cylinders = mean(engine_cylinders)
+    # Add more summary statistics as needed
+  )
+
+# Visualize cluster characteristics
+print(cluster_summary)
+```
+
+This summary suggests that the data has been clustered into three groups based on the mean values of three variables: CO2 emissions, city miles per gallon (MPG), and engine cylinders. Cluster 1 has the highest mean CO2 emissions, moderate city MPG, and a moderate number of engine cylinders. Cluster 2 has the lowest mean CO2 emissions, highest city MPG, and the number of engine cylinders is not available for this cluster. Cluster 3 has high mean CO2 emissions, low city MPG, and the highest number of engine cylinders among the clusters.
+
+These clusters indicate distinct patterns or groups within the data based on the characteristics of the vehicles represented by these variables. For example, Cluster 2 could represent more fuel-efficient vehicles with lower CO2 emissions, while Cluster 3 could represent less fuel-efficient vehicles with higher CO2 emissions and more powerful engines.
+
+### Dendrograms
+
+```{r}
+# Load the required libraries
+library(readr)
+library(dplyr)
+library(ggplot2)
+
+
+# Select relevant variable
+variable <- "tailpipe_co2_in_grams_mile_ft1"
+
+# Sample the dataset (optional)
+set.seed(123)  # Set seed for reproducibility
+sampled_data <- Fuel_hclust %>% sample_n(500)  # Adjust the number of samples as needed
+
+# Normalize the data (optional)
+scaled_data <- scale(sampled_data[[variable]])
+
+# Compute the distance matrix
+distance_matrix <- dist(scaled_data)
+
+# Perform hierarchical clustering
+hierarchical_clusters <- hclust(distance_matrix, method = "ward.D2")
+
+# Plot the dendrogram
+plot(hierarchical_clusters, main = "Dendrogram of Hierarchical Clustering", xlab = "", ylab = "Distance")
+
+# Cut the dendrogram to get clusters
+num_clusters <- 3  # You can adjust this based on the dendrogram
+clusters <- cutree(hierarchical_clusters, k = num_clusters)
+
+# Add cluster labels to the original dataset
+sampled_data$cluster <- clusters
+
+# Visualize the clusters
+ggplot(sampled_data, aes(x = tailpipe_co2_in_grams_mile_ft1, y = ..density.., fill = factor(cluster))) +
+  geom_density(alpha = 0.5) +
+  labs(x = "CO2 Emissions (g/mi)", y = "Density", title = "Clusters Based on CO2 Emissions") +
+  scale_fill_discrete(name = "Cluster") +
+  theme_minimal()
+
+library(dplyr)
+```
+
+In the context of hierarchical clustering, a dendrogram is a diagram that illustrates the arrangement of clusters created during the clustering process. It's a tree-like structure where the leaves represent individual data points, and the branches represent the merging of clusters as the algorithm progresses. Each merge in the dendrogram corresponds to a level of similarity or dissimilarity between clusters. The height of each fusion in the dendrogram reflects the distance or dissimilarity between the clusters being merged. The longer the branch, the less similar the clusters are. The dendrogram shows that clusters are mainly conglomerated between two large clusters with a relatively large distance.
+
+The second plot visualizes the clusters based on CO2 emissions. It consists of multiple density curves overlaid on the same axis. Each density curve represents a different cluster, distinguished by color. The x-axis represents CO2 emissions measured in grams per mile (g/mi), while the y-axis represents the density of data points within each range of CO2 emissions.
+
+The overlapping density curves provide insights into the distribution of CO2 emissions across the clusters. Areas where the density curves overlap indicate regions of similarity in CO2 emissions between clusters, while distinct peaks or valleys suggest differences in emission levels. The transparency of the curves allows for better visualization of overlapping regions.
+
+The legend on the plot identifies each cluster by color, facilitating interpretation of the density curves. The title of the plot, "Clusters Based on CO2 Emissions," provides context for the analysis, indicating that the clusters were derived from CO2 emission data. Overall, the plot enables viewers to compare the distribution of CO2 emissions across different clusters and identify potential patterns or trends within the data.
+
+```{r}
+# Plot the dendrogram
+plot(hclust_result)
+suppressPackageStartupMessages(library(dendextend))
+avg_dend_obj <- as.dendrogram(hclust_result)
+avg_col_dend <- color_branches(avg_dend_obj, h = 3)
+plot(avg_col_dend)
+```
+
+This code segment first plots a dendrogram resulting from hierarchical clustering (\`hclust_result\`). Then, it loads the \`dendextend\` package, which provides functions for manipulating and visualizing dendrogram objects in R. Next, it converts the hierarchical clustering result (\`hclust_result\`) into a dendrogram object (\`avg_dend_obj\`) using the \`as.dendrogram()\` function. Afterward, it colors the branches of the dendrogram based on a specified height threshold (\`h = 3\`) using the \`color_branches()\` function. Finally, it plots the dendrogram with colored branches (\`avg_col_dend\`). With the addition of the color branches function, we can see the dispersion of the data. Again, this solidifies our understanding of the clusters as two of the clusters being largely close.
+
+### Results
+
+To preface my results, I want to make a note of a few things. First, the nature of sampling invites the inability to make specific acknowledgements about the data. These results are overall generalizations. Not every single datapoint was factored into the clustering process due to scale. The clustering of variables based on CO2 emissions, city miles per gallon (MPG), and engine cylinders provides insights into the relationships between these variables and their impact on CO2 emission levels and fuel efficiency.
+
+1\. CO2 Emissions and Fuel Efficiency: The clusters reveal distinct patterns in the relationship between CO2 emissions and fuel efficiency (represented by city MPG). For example, Cluster 2, characterized by low CO2 emissions and high city MPG, suggests a group of vehicles that are more fuel-efficient and emit lower levels of CO2 compared to the other clusters. Conversely, Cluster 3, with high CO2 emissions and low city MPG, indicates less fuel-efficient vehicles emitting higher levels of CO2.
+
+2\. Engine Cylinders and CO2 Emissions: The clusters also shed light on the relationship between engine cylinders and CO2 emissions. Cluster 3, which exhibits the highest number of engine cylinders, corresponds to vehicles with elevated CO2 emissions. This suggests a potential correlation between engine size (as indicated by the number of cylinders) and CO2 emissions, with larger engines typically resulting in higher emissions.
+
+3\. Complex Relationships: Additionally, the presence of Cluster 1, which shows moderate CO2 emissions, city MPG, and engine cylinders, indicates a more nuanced relationship between these variables. This cluster may represent a diverse group of vehicles with varying engine sizes and fuel efficiency levels, resulting in moderate CO2 emissions.
+
+The clustering analysis highlights how different combinations of variables contribute to variations in CO2 emissions and fuel efficiency among vehicles. It underscores the importance of considering multiple factors, such as engine size and fuel efficiency, when assessing environmental impacts and performance metrics like CO2 emissions.
+
+Companies should diversify their product portfolio to cater to different customer preferences and market segments identified through clustering analysis. They should allocate resources towards the development of fuel-efficient vehicles, especially those with low CO2 emissions and high city MPG, which align with the characteristics of Cluster 2. By tailoring marketing messages to resonate with the identified clusters, companies can highlight the fuel efficiency, environmental benefits, and unique features of each vehicle category to appeal to specific customer segments. This type of technology can be applied to develop online tools or mobile apps that allow customers to compare vehicles based on their CO2 emissions, fuel efficiency ratings, and other relevant factors. Enable customers to make informed decisions that align with their values and preferences. By incorporating these recommendations into their business strategies, companies can leverage the insights from the data analysis to enhance their competitiveness, strengthen brand reputation, and contribute to the transition towards a more sustainable automotive industry.
+
+## Source:
+
+Kaggle.com
